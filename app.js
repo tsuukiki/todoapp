@@ -752,9 +752,76 @@
   }
 
   // ----------------------------------------------------------------
+  // Ecran d'accueil : citation de motivation (5s bloquees puis clic)
+  // ----------------------------------------------------------------
+  const QUOTES = [
+    { text: "Le succes, c'est tomber sept fois et se relever huit.", author: "Proverbe japonais" },
+    { text: "La meilleure facon de predire l'avenir, c'est de le creer.", author: "Peter Drucker" },
+    { text: "Ne comptez pas les jours, faites que les jours comptent.", author: "Mohamed Ali" },
+    { text: "Votre temps est limite, ne le gachez pas a vivre la vie de quelqu'un d'autre.", author: "Steve Jobs" },
+    { text: "Le seul endroit ou le succes precede le travail, c'est dans le dictionnaire.", author: "Vidal Sassoon" },
+    { text: "Les opportunites ne se presentent pas, c'est vous qui les creez.", author: "Chris Grosser" },
+    { text: "Commence par faire le necessaire, puis le possible, et tu realiseras l'impossible.", author: "Francois d'Assise" },
+    { text: "La discipline est le pont entre les objectifs et les accomplissements.", author: "Jim Rohn" },
+    { text: "Le risque le plus grand est de ne prendre aucun risque.", author: "Mark Zuckerberg" },
+    { text: "Fais de ta vie un reve, et d'un reve une realite.", author: "Antoine de Saint-Exupery" },
+    { text: "Ce qui ne se mesure pas ne s'ameliore pas.", author: "Peter Drucker" },
+    { text: "Travaille dur en silence, laisse le succes faire le bruit.", author: "Frank Ocean" },
+    { text: "L'action est la cle fondamentale de tout succes.", author: "Pablo Picasso" },
+    { text: "Si tu veux aller vite, marche seul ; si tu veux aller loin, marchons ensemble.", author: "Proverbe africain" },
+    { text: "N'ayez pas peur d'abandonner le bon pour atteindre le grand.", author: "John D. Rockefeller" },
+    { text: "Le pessimiste voit la difficulte dans chaque opportunite, l'optimiste voit l'opportunite dans chaque difficulte.", author: "Winston Churchill" },
+    { text: "La motivation vous lance, l'habitude vous fait continuer.", author: "Jim Ryun" },
+    { text: "Un objectif sans plan n'est qu'un souhait.", author: "Antoine de Saint-Exupery" },
+    { text: "Ce n'est pas la montagne que nous conquerons, mais nous-memes.", author: "Edmund Hillary" },
+    { text: "Reve grand, commence petit, mais surtout : commence.", author: "Simon Sinek" },
+    { text: "La qualite n'est jamais un accident, c'est toujours le resultat d'un effort intelligent.", author: "John Ruskin" },
+    { text: "Tomber n'est pas un echec, l'echec c'est de rester la ou l'on est tombe.", author: "Socrate" },
+    { text: "Les gens qui reussissent agissent avant d'etre prets.", author: "Richard Branson" },
+    { text: "Chaque expert a un jour ete un debutant.", author: "Helen Hayes" },
+    { text: "Concentre-toi sur l'etre productif plutot que sur l'etre occupe.", author: "Tim Ferriss" },
+    { text: "Le succes n'est pas final, l'echec n'est pas fatal : c'est le courage de continuer qui compte.", author: "Winston Churchill" },
+    { text: "Fais aujourd'hui ce que les autres ne veulent pas, tu vivras demain comme les autres ne peuvent pas.", author: "Anonyme" },
+    { text: "La perfection n'est pas atteignable, mais en la cherchant on atteint l'excellence.", author: "Vince Lombardi" },
+  ];
+
+  const Splash = {
+    start() {
+      const el = $("#splash");
+      if (!el) return;
+
+      // citation aleatoire a chaque lancement
+      const q = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+      $("#splash-quote").textContent = "« " + q.text + " »";
+      $("#splash-author").textContent = q.author ? "— " + q.author : "";
+
+      // demarre la barre de progression (5s) en synchro avec le minuteur
+      el.classList.add("counting");
+
+      let ready = false;
+      const unlock = () => {
+        ready = true;
+        el.classList.add("ready");
+        $("#splash-hint").textContent = "Touchez l'ecran pour continuer";
+      };
+      const timer = setTimeout(unlock, 5000);
+
+      const dismiss = () => {
+        if (!ready) return; // bloque tant que les 5s ne sont pas ecoulees
+        clearTimeout(timer);
+        el.classList.add("closing");
+        el.removeEventListener("click", dismiss);
+        setTimeout(() => el.classList.add("hidden"), 350);
+      };
+      el.addEventListener("click", dismiss);
+    },
+  };
+
+  // ----------------------------------------------------------------
   // Demarrage
   // ----------------------------------------------------------------
   function start() {
+    Splash.start();
     loadTasks();
     loadRoutine();
     loadRoutineState();

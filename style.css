@@ -712,6 +712,132 @@ input[type="datetime-local"] {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ===================== ECRAN D'ACCUEIL (CITATION) ===================== */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: radial-gradient(120% 120% at 50% 0%, #ffffff 0%, #f6f6f8 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 32px) 28px calc(var(--safe-bottom) + 28px);
+  text-align: center;
+  cursor: default;
+  transition: opacity 0.35s ease;
+}
+
+/* pendant les 5s : on bloque toute interaction */
+.splash:not(.ready) {
+  pointer-events: auto;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.splash.ready {
+  cursor: pointer;
+}
+
+.splash.closing {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-inner {
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: splash-rise 0.5s ease both;
+}
+
+.splash-icon img {
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  margin-bottom: 26px;
+  opacity: 0.95;
+}
+
+.splash-quote {
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1.45;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.splash-author {
+  display: block;
+  margin-top: 18px;
+  font-style: normal;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.splash-foot {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: calc(var(--safe-bottom) + 36px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.splash-progress {
+  width: 100%;
+  max-width: 220px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+}
+
+.splash-bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-grad);
+}
+
+/* la barre se remplit en 5s une fois la classe "counting" ajoutee */
+.splash.counting .splash-bar {
+  animation: splash-fill 5s linear forwards;
+}
+
+.splash-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-faint);
+  transition: color 0.2s;
+}
+
+.splash.ready .splash-hint {
+  color: var(--text);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes splash-fill {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes splash-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 /* ===================== ANIMATIONS ===================== */
 @keyframes fade-in {
   from { opacity: 0; }

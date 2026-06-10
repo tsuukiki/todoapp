@@ -20,6 +20,20 @@
 </head>
 <body>
 
+  <!-- ====== ECRAN D'ACCUEIL : CITATION DE MOTIVATION ======
+       Visible des le chargement. Bloque 5s, puis clic n'importe ou pour entrer. -->
+  <div id="splash" class="splash">
+    <div class="splash-inner">
+      <div class="splash-icon"><img src="/icons/icon-192.png" alt="" width="64" height="64" /></div>
+      <blockquote class="splash-quote" id="splash-quote"></blockquote>
+      <cite class="splash-author" id="splash-author"></cite>
+    </div>
+    <div class="splash-foot">
+      <div class="splash-progress"><span id="splash-bar" class="splash-bar"></span></div>
+      <p class="splash-hint" id="splash-hint">Un instant&hellip;</p>
+    </div>
+  </div>
+
   <!-- ====== APPLICATION ====== -->
   <div id="app" class="app">
     <header class="app-header">
