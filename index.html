@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="description" content="Ma to-do list personnelle avec rappels push." />
+  <meta name="description" content="Mes habitudes quotidiennes avec rappels push." />
 
   <!-- PWA / iOS -->
   <link rel="manifest" href="/manifest.json" />
@@ -40,10 +40,57 @@
         <h1 class="app-title">Ma To-Do</h1>
       </div>
       <p id="today-label" class="today-label"></p>
-      <div id="badges" class="badges"></div>
     </header>
 
-    <!-- Banniere notifications -->
+    <!-- ====== GRAPHIQUE DES HABITUDES (en haut) ====== -->
+    <section class="card habits">
+      <div class="routine-head">
+        <h2 class="section-title">Mes habitudes</h2>
+        <span id="habits-avg" class="daily-progress">&mdash;</span>
+      </div>
+      <div id="habit-chart" class="habit-chart" aria-label="Pourcentage d'habitudes effectuees par jour"></div>
+    </section>
+
+    <!-- ====== MATIN ====== -->
+    <section class="card group" data-group="matin">
+      <div class="routine-head">
+        <h2 class="section-title">Matin</h2>
+        <span class="daily-progress" data-progress="matin">0/0</span>
+      </div>
+      <ul class="daily-list" data-list="matin"></ul>
+      <form class="daily-add" data-add="matin" autocomplete="off">
+        <input type="text" class="daily-input" maxlength="80" placeholder="Ajouter une habitude du matin..." />
+        <button type="submit" class="btn-add-sm" aria-label="Ajouter">+</button>
+      </form>
+    </section>
+
+    <!-- ====== JOURNEE ====== -->
+    <section class="card group" data-group="journee">
+      <div class="routine-head">
+        <h2 class="section-title">Journee</h2>
+        <span class="daily-progress" data-progress="journee">0/0</span>
+      </div>
+      <ul class="daily-list" data-list="journee"></ul>
+      <form class="daily-add" data-add="journee" autocomplete="off">
+        <input type="text" class="daily-input" maxlength="80" placeholder="Ajouter une habitude de journee..." />
+        <button type="submit" class="btn-add-sm" aria-label="Ajouter">+</button>
+      </form>
+    </section>
+
+    <!-- ====== NOTIFICATIONS (cases a cocher chaque matin) ====== -->
+    <section class="card group" data-group="notifications">
+      <div class="routine-head">
+        <h2 class="section-title">Notifications</h2>
+        <span class="daily-progress" data-progress="notifications">0/0</span>
+      </div>
+      <ul class="daily-list" data-list="notifications"></ul>
+      <form class="daily-add" data-add="notifications" autocomplete="off">
+        <input type="text" class="daily-input" maxlength="80" placeholder="Ajouter une notification..." />
+        <button type="submit" class="btn-add-sm" aria-label="Ajouter">+</button>
+      </form>
+    </section>
+
+    <!-- Banniere notifications (visible tant qu'elles ne sont pas activees) -->
     <div id="notif-banner" class="notif-banner hidden">
       <div class="notif-text">
         <strong>Notifications push</strong>
@@ -52,90 +99,9 @@
       <button type="button" id="enable-notif" class="btn-primary">Activer les notifications</button>
     </div>
 
-    <!-- ====== ROUTINE DU JOUR (taches fixes, remise a zero chaque jour) ====== -->
-    <section class="card routine">
-      <div class="routine-head">
-        <h2 class="section-title">Routine du jour</h2>
-        <span id="daily-progress" class="daily-progress">0/0</span>
-      </div>
-      <ul id="daily-list" class="daily-list"></ul>
-      <form id="daily-add-form" class="daily-add" autocomplete="off">
-        <input type="text" id="daily-input" class="daily-input" placeholder="Ajouter une tache fixe..." maxlength="80" />
-        <button type="submit" class="btn-add-sm" aria-label="Ajouter a la routine">+</button>
-      </form>
-    </section>
-
-    <!-- ====== GRAPHIQUE DES HABITUDES ====== -->
-    <section class="card habits">
-      <div class="routine-head">
-        <h2 class="section-title">Mes habitudes</h2>
-        <span id="habits-avg" class="daily-progress">&mdash;</span>
-      </div>
-      <div id="habit-chart" class="habit-chart" aria-label="Pourcentage de routine effectuee par jour"></div>
-    </section>
-
-    <!-- ====== TACHES PONCTUELLES ====== -->
-    <h2 class="section-title section-title-spaced">Mes taches</h2>
-
-    <!-- Formulaire d'ajout -->
-    <form id="add-form" class="add-form card" autocomplete="off">
-      <input
-        type="text"
-        id="task-title"
-        class="input-title"
-        placeholder="Nouvelle tache..."
-        maxlength="200"
-        required
-      />
-      <div class="add-form-row">
-        <input type="datetime-local" id="task-due" class="input-due" />
-        <input type="text" id="task-cat" class="input-cat" placeholder="Categorie" maxlength="30" />
-        <button type="submit" class="btn-add" aria-label="Ajouter">+</button>
-      </div>
-    </form>
-
-    <!-- Filtres -->
-    <div class="filters" id="filters">
-      <button type="button" class="filter active" data-filter="all">Toutes</button>
-      <button type="button" class="filter" data-filter="today">Aujourd'hui</button>
-      <button type="button" class="filter" data-filter="late">En retard</button>
-      <button type="button" class="filter" data-filter="done">Faites</button>
-    </div>
-
-    <!-- Liste des taches -->
-    <ul id="task-list" class="task-list"></ul>
-    <p id="empty-state" class="empty-state hidden">Aucune tache ici. Profitez-en ! &#127880;</p>
-
     <footer class="app-footer">
       <button type="button" id="test-notif" class="btn-ghost hidden">Tester une notification</button>
-      <button type="button" id="clear-done" class="btn-ghost">Supprimer les taches faites</button>
     </footer>
-  </div>
-
-  <!-- ====== MODALE D'EDITION ====== -->
-  <div id="edit-modal" class="modal hidden" aria-hidden="true">
-    <div class="modal-card">
-      <h2 class="modal-title">Modifier la tache</h2>
-      <form id="edit-form">
-        <input type="hidden" id="edit-id" />
-        <label class="field">
-          <span>Titre</span>
-          <input type="text" id="edit-title" maxlength="200" required />
-        </label>
-        <label class="field">
-          <span>Echeance (date + heure)</span>
-          <input type="datetime-local" id="edit-due" />
-        </label>
-        <label class="field">
-          <span>Categorie</span>
-          <input type="text" id="edit-cat" maxlength="30" placeholder="(optionnel)" />
-        </label>
-        <div class="modal-actions">
-          <button type="button" id="edit-cancel" class="btn-ghost">Annuler</button>
-          <button type="submit" class="btn-primary">Enregistrer</button>
-        </div>
-      </form>
-    </div>
   </div>
 
   <!-- Toast -->

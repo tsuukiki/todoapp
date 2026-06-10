@@ -209,10 +209,11 @@ button {
   color: var(--text);
 }
 
-/* ===================== ROUTINE DU JOUR ===================== */
-.routine {
+/* ===================== ROUTINE / GROUPES (Matin, Journee...) ===================== */
+.routine,
+.group {
   padding: 16px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .routine-head {

@@ -1,8 +1,9 @@
 /* ================================================================
    Ma To-Do — logique de l'application (frontend)
-   - Taches ponctuelles en localStorage (hors-ligne, privees sur l'appareil)
-   - Routine du jour : taches fixes qui se remettent a zero chaque jour
-   - Notifications push iOS (PWA) : abonnement + synchro des rappels
+   - Habitudes en groupes (Matin / Journee / Notifications)
+     -> cases a cocher qui se remettent a zero chaque jour
+   - Graphique de reussite des habitudes (Matin + Journee)
+   - Notifications push iOS (PWA) : abonnement + bouton de test
    ================================================================ */
 
 (() => {
@@ -12,38 +13,52 @@
   // Petits utilitaires
   // ----------------------------------------------------------------
   const $ = (sel) => document.querySelector(sel);
-  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  const STORAGE_TASKS = "todo.tasks.v1";
   const STORAGE_DEVICE = "todo.deviceId.v1";
-  const STORAGE_ROUTINE = "todo.routine.v1"; // modeles de taches fixes
-  const STORAGE_ROUTINE_STATE = "todo.routineState.v1"; // { date, done:{id:true} }
-  const STORAGE_ROUTINE_HISTORY = "todo.routineHistory.v1"; // { "YYYY-MM-DD": {done,total} }
+  const STORAGE_GROUPS = "todo.groups.v2"; // { matin:[{id,label}], journee:[...], notifications:[...] }
+  const STORAGE_GROUPS_STATE = "todo.groupsState.v2"; // { date, done:{ id:true } }
+  const STORAGE_HABIT_HISTORY = "todo.habitHistory.v2"; // { "YYYY-MM-DD": { done, total } }
+  const STORAGE_ROUTINE_HISTORY_OLD = "todo.routineHistory.v1"; // ancien historique (migration)
 
-  const HABIT_DAYS = 7; // nombre de jours affiches dans le graphique
-  const HISTORY_KEEP_DAYS = 90; // on ne garde pas un historique infini
+  const HABIT_DAYS = 7; // jours affiches dans le graphique
+  const HISTORY_KEEP_DAYS = 90;
 
-  let tasks = [];
-  let routine = []; // [{ id, label }]
-  let routineState = { date: "", done: {} };
-  let routineHistory = {}; // historique des % de routine par jour
-  let currentFilter = "all";
-  let vapidPublicKey = null;
-
-  // 5 taches fixes d'exemple (a renommer/garder selon tes envies)
-  const DEFAULT_ROUTINE = [
-    "Boire un grand verre d'eau",
-    "10 minutes de lecture",
-    "Faire le lit",
-    "Marcher 30 minutes",
-    "Verifier les e-mails pro",
+  // Definition des groupes. countsForHabits = compte dans le % de reussite.
+  const GROUPS = [
+    { key: "matin", countsForHabits: true },
+    { key: "journee", countsForHabits: true },
+    { key: "notifications", countsForHabits: false },
   ];
+
+  // Contenu par defaut (premier lancement)
+  const DEFAULT_GROUPS = {
+    matin: [
+      "Leve a 7h",
+      "Verre d'eau",
+      "Mobilite a jeun",
+      "5min dehors",
+      "0 Reseaux sociaux",
+      "Sport",
+    ],
+    journee: ["15min mur", "Habitudes DeepWork", "Pas de scroll en journee"],
+    notifications: [
+      "Notification 1",
+      "Notification 2",
+      "Notification 3",
+      "Notification 4",
+      "Notification 5",
+    ],
+  };
+
+  let groups = { matin: [], journee: [], notifications: [] };
+  let groupsState = { date: "", done: {} };
+  let habitHistory = {};
+  let vapidPublicKey = null;
 
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
-  // Identifiant d'appareil stable (pour relier l'abonnement push cote serveur)
   function deviceId() {
     let id = localStorage.getItem(STORAGE_DEVICE);
     if (!id) {
@@ -57,7 +72,7 @@
     const t = $("#toast");
     t.textContent = msg;
     t.classList.remove("hidden");
-    void t.offsetWidth; // forcer le reflow pour rejouer la transition
+    void t.offsetWidth;
     t.classList.add("show");
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => {
@@ -66,166 +81,130 @@
     }, 2600);
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    })[c]);
-  }
-
-  // ----------------------------------------------------------------
-  // Dates
-  // ----------------------------------------------------------------
-  function startOfDay(d) {
-    const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
-    return x.getTime();
-  }
-
-  function isToday(ts) {
-    return startOfDay(ts) === startOfDay(new Date());
-  }
-
-  function isLate(task) {
-    return task.remindAt && !task.done && task.remindAt < Date.now();
-  }
-
-  // cle du jour "YYYY-MM-DD" (heure locale)
   function todayKey() {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
-  // valeur d'un <input datetime-local> -> timestamp (ms)
-  function localInputToTs(value) {
-    if (!value) return null;
-    const ts = new Date(value).getTime();
-    return Number.isNaN(ts) ? null : ts;
-  }
-
-  // timestamp -> valeur pour <input datetime-local> (heure locale)
-  function tsToLocalInput(ts) {
-    if (!ts) return "";
-    const d = new Date(ts);
-    const pad = (n) => String(n).padStart(2, "0");
-    return (
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
-    );
-  }
-
-  function formatDue(ts) {
-    const d = new Date(ts);
-    const opts = isToday(ts)
-      ? { hour: "2-digit", minute: "2-digit" }
-      : { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" };
-    const label = d.toLocaleString("fr-FR", opts);
-    return isToday(ts) ? "Aujourd'hui " + label : label;
-  }
-
   // ----------------------------------------------------------------
-  // Persistance
+  // Persistance : groupes + etat du jour + historique
   // ----------------------------------------------------------------
-  function loadTasks() {
+  function loadGroups() {
     try {
-      tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS) || "[]");
-    } catch {
-      tasks = [];
-    }
-  }
-
-  function saveTasks() {
-    localStorage.setItem(STORAGE_TASKS, JSON.stringify(tasks));
-  }
-
-  function loadRoutine() {
-    try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_ROUTINE) || "null");
-      if (Array.isArray(stored)) {
-        routine = stored;
-      } else {
-        // premiere fois : on installe les 5 taches d'exemple
-        routine = DEFAULT_ROUTINE.map((label) => ({ id: uid(), label }));
-        saveRoutine();
+      const stored = JSON.parse(localStorage.getItem(STORAGE_GROUPS) || "null");
+      if (stored && typeof stored === "object") {
+        for (const g of GROUPS) {
+          groups[g.key] = Array.isArray(stored[g.key]) ? stored[g.key] : [];
+        }
+        return;
       }
     } catch {
-      routine = DEFAULT_ROUTINE.map((label) => ({ id: uid(), label }));
+      /* on retombe sur les valeurs par defaut */
     }
+    // premier lancement : on installe le contenu par defaut
+    for (const g of GROUPS) {
+      groups[g.key] = (DEFAULT_GROUPS[g.key] || []).map((label) => ({ id: uid(), label }));
+    }
+    saveGroups();
   }
 
-  function saveRoutine() {
-    localStorage.setItem(STORAGE_ROUTINE, JSON.stringify(routine));
+  function saveGroups() {
+    localStorage.setItem(STORAGE_GROUPS, JSON.stringify(groups));
   }
 
-  function loadRoutineState() {
+  function loadGroupsState() {
     try {
-      routineState = JSON.parse(
-        localStorage.getItem(STORAGE_ROUTINE_STATE) || "null"
-      ) || { date: "", done: {} };
+      groupsState =
+        JSON.parse(localStorage.getItem(STORAGE_GROUPS_STATE) || "null") || {
+          date: "",
+          done: {},
+        };
     } catch {
-      routineState = { date: "", done: {} };
+      groupsState = { date: "", done: {} };
     }
-    ensureRoutineToday();
+    ensureGroupsToday();
   }
 
-  function saveRoutineState() {
-    localStorage.setItem(STORAGE_ROUTINE_STATE, JSON.stringify(routineState));
+  function saveGroupsState() {
+    localStorage.setItem(STORAGE_GROUPS_STATE, JSON.stringify(groupsState));
   }
 
-  // remet la routine a zero si on a change de jour
-  function ensureRoutineToday() {
+  // remet toutes les cases a zero si on a change de jour
+  function ensureGroupsToday() {
     const key = todayKey();
-    if (routineState.date !== key) {
-      routineState = { date: key, done: {} };
-      saveRoutineState();
-      recordHabitToday(); // cree l'entree du nouveau jour (0%)
+    if (groupsState.date !== key) {
+      groupsState = { date: key, done: {} };
+      saveGroupsState();
+      recordHabitToday();
     }
   }
 
-  // ---- Historique des habitudes (pour le graphique) ----
   function loadHistory() {
     try {
-      routineHistory = JSON.parse(
-        localStorage.getItem(STORAGE_ROUTINE_HISTORY) || "{}"
-      ) || {};
+      habitHistory = JSON.parse(localStorage.getItem(STORAGE_HABIT_HISTORY) || "null") || {};
     } catch {
-      routineHistory = {};
+      habitHistory = {};
+    }
+    // migration : reprendre l'ancien historique si le nouveau est vide
+    if (Object.keys(habitHistory).length === 0) {
+      try {
+        const old = JSON.parse(localStorage.getItem(STORAGE_ROUTINE_HISTORY_OLD) || "null");
+        if (old && typeof old === "object") {
+          habitHistory = old;
+          saveHistory();
+        }
+      } catch {
+        /* rien */
+      }
     }
   }
 
   function saveHistory() {
-    // on elague l'historique trop ancien
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - HISTORY_KEEP_DAYS);
     const min = cutoff.toISOString().slice(0, 10);
-    for (const k of Object.keys(routineHistory)) {
-      if (k < min) delete routineHistory[k];
+    for (const k of Object.keys(habitHistory)) {
+      if (k < min) delete habitHistory[k];
     }
-    localStorage.setItem(STORAGE_ROUTINE_HISTORY, JSON.stringify(routineHistory));
+    localStorage.setItem(STORAGE_HABIT_HISTORY, JSON.stringify(habitHistory));
   }
 
-  // enregistre l'etat du jour (mis a jour a chaque changement de routine)
+  // total des habitudes qui comptent (Matin + Journee)
+  function habitTotals() {
+    let total = 0;
+    let done = 0;
+    for (const g of GROUPS) {
+      if (!g.countsForHabits) continue;
+      for (const item of groups[g.key]) {
+        total++;
+        if (groupsState.done[item.id]) done++;
+      }
+    }
+    return { done, total };
+  }
+
   function recordHabitToday() {
-    const total = routine.length;
-    const done = routine.filter((i) => routineState.done[i.id]).length;
-    routineHistory[todayKey()] = { done, total };
+    const { done, total } = habitTotals();
+    habitHistory[todayKey()] = { done, total };
     saveHistory();
   }
 
   // ----------------------------------------------------------------
-  // Routine du jour : rendu + actions
+  // Rendu des groupes (listes a cocher)
   // ----------------------------------------------------------------
-  function renderRoutine() {
-    ensureRoutineToday();
-    const list = $("#daily-list");
-    list.innerHTML = "";
+  function renderGroups() {
+    ensureGroupsToday();
+    for (const g of GROUPS) renderGroupList(g.key);
+  }
 
-    routine.forEach((item) => {
-      const done = !!routineState.done[item.id];
+  function renderGroupList(key) {
+    const ul = document.querySelector(`[data-list="${key}"]`);
+    if (!ul) return;
+    ul.innerHTML = "";
+
+    for (const item of groups[key]) {
+      const done = !!groupsState.done[item.id];
       const li = document.createElement("li");
       li.className = "daily-item" + (done ? " done" : "");
       li.dataset.id = item.id;
@@ -235,34 +214,100 @@
       check.className = "daily-check" + (done ? " checked" : "");
       check.innerHTML = "&#10003;";
       check.setAttribute("aria-label", done ? "Decocher" : "Cocher");
-      check.addEventListener("click", () => toggleRoutine(item.id));
+      check.addEventListener("click", () => toggleItem(item.id));
 
       const label = document.createElement("span");
       label.className = "daily-label";
       label.textContent = item.label;
-      // double-clic / clic sur le texte = renommer
-      label.addEventListener("click", () => startRenameRoutine(item.id, li));
+      label.addEventListener("click", () => startRename(key, item.id, li));
 
       const del = document.createElement("button");
       del.type = "button";
       del.className = "daily-del";
       del.innerHTML = "&#128465;";
-      del.setAttribute("aria-label", "Supprimer cette tache fixe");
-      del.addEventListener("click", () => deleteRoutine(item.id));
+      del.setAttribute("aria-label", "Supprimer");
+      del.addEventListener("click", () => deleteItem(key, item.id));
 
       li.append(check, label, del);
-      list.appendChild(li);
-    });
+      ul.appendChild(li);
+    }
 
-    // progression
-    const total = routine.length;
-    const doneCount = routine.filter((i) => routineState.done[i.id]).length;
-    const prog = $("#daily-progress");
-    prog.textContent = `${doneCount}/${total}`;
-    prog.classList.toggle("complete", total > 0 && doneCount === total);
+    // progression du groupe
+    const total = groups[key].length;
+    const doneCount = groups[key].filter((i) => groupsState.done[i.id]).length;
+    const prog = document.querySelector(`[data-progress="${key}"]`);
+    if (prog) {
+      prog.textContent = `${doneCount}/${total}`;
+      prog.classList.toggle("complete", total > 0 && doneCount === total);
+    }
   }
 
-  // ---- Graphique des habitudes : derniers jours en barres ----
+  function toggleItem(id) {
+    ensureGroupsToday();
+    if (groupsState.done[id]) delete groupsState.done[id];
+    else groupsState.done[id] = true;
+    saveGroupsState();
+    recordHabitToday();
+    renderGroups();
+    renderHabits();
+  }
+
+  function addItem(key, label) {
+    const text = label.trim();
+    if (!text) return;
+    groups[key].push({ id: uid(), label: text });
+    saveGroups();
+    recordHabitToday();
+    renderGroups();
+    renderHabits();
+  }
+
+  function deleteItem(key, id) {
+    groups[key] = groups[key].filter((i) => i.id !== id);
+    delete groupsState.done[id];
+    saveGroups();
+    saveGroupsState();
+    recordHabitToday();
+    renderGroups();
+    renderHabits();
+  }
+
+  function startRename(key, id, li) {
+    const item = groups[key].find((i) => i.id === id);
+    if (!item || li.querySelector(".daily-rename")) return;
+
+    const label = li.querySelector(".daily-label");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "daily-rename";
+    input.maxLength = 80;
+    input.value = item.label;
+    label.replaceWith(input);
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    const commit = () => {
+      const val = input.value.trim();
+      if (val) {
+        item.label = val;
+        saveGroups();
+      }
+      renderGroups();
+    };
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        input.blur();
+      } else if (e.key === "Escape") {
+        renderGroups();
+      }
+    });
+  }
+
+  // ----------------------------------------------------------------
+  // Graphique des habitudes (derniers jours en barres)
+  // ----------------------------------------------------------------
   function renderHabits() {
     const chart = $("#habit-chart");
     if (!chart) return;
@@ -271,14 +316,13 @@
     const dayLabels = ["Di", "Lu", "Ma", "Me", "Je", "Ve", "Sa"];
     const pad = (n) => String(n).padStart(2, "0");
     const today = todayKey();
-
-    const pcts = []; // pour la moyenne (jours avec donnees)
+    const pcts = [];
 
     for (let i = HABIT_DAYS - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-      const entry = routineHistory[key];
+      const entry = habitHistory[key];
       const hasData = entry && entry.total > 0;
       const pct = hasData ? Math.round((entry.done / entry.total) * 100) : 0;
       if (hasData) pcts.push(pct);
@@ -296,7 +340,6 @@
       track.className = "habit-track";
       const bar = document.createElement("div");
       bar.className = "habit-bar";
-      // hauteur appliquee apres insertion pour declencher la transition
       requestAnimationFrame(() => {
         bar.style.height = hasData ? pct + "%" : "0%";
       });
@@ -311,7 +354,6 @@
       chart.appendChild(col);
     }
 
-    // moyenne sur les jours suivis
     const avgEl = $("#habits-avg");
     if (pcts.length) {
       const avg = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
@@ -323,304 +365,22 @@
     }
   }
 
-  function toggleRoutine(id) {
-    ensureRoutineToday();
-    if (routineState.done[id]) delete routineState.done[id];
-    else routineState.done[id] = true;
-    saveRoutineState();
-    recordHabitToday();
-    renderRoutine();
-    renderHabits();
-  }
-
-  function addRoutine(label) {
-    const text = label.trim();
-    if (!text) return;
-    routine.push({ id: uid(), label: text });
-    saveRoutine();
-    recordHabitToday();
-    renderRoutine();
-    renderHabits();
-  }
-
-  function deleteRoutine(id) {
-    routine = routine.filter((i) => i.id !== id);
-    delete routineState.done[id];
-    saveRoutine();
-    saveRoutineState();
-    recordHabitToday();
-    renderRoutine();
-    renderHabits();
-  }
-
-  function startRenameRoutine(id, li) {
-    const item = routine.find((i) => i.id === id);
-    if (!item || li.querySelector(".daily-rename")) return;
-
-    const label = li.querySelector(".daily-label");
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "daily-rename";
-    input.maxLength = 80;
-    input.value = item.label;
-    label.replaceWith(input);
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-
-    const commit = () => {
-      const val = input.value.trim();
-      if (val) {
-        item.label = val;
-        saveRoutine();
-      }
-      renderRoutine();
-    };
-    input.addEventListener("blur", commit);
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        input.blur();
-      } else if (e.key === "Escape") {
-        renderRoutine();
-      }
-    });
-  }
-
-  // ----------------------------------------------------------------
-  // Taches ponctuelles : rendu
-  // ----------------------------------------------------------------
-  function matchesFilter(task) {
-    switch (currentFilter) {
-      case "today":
-        return task.remindAt && isToday(task.remindAt) && !task.done;
-      case "late":
-        return isLate(task);
-      case "done":
-        return task.done;
-      default:
-        return true;
-    }
-  }
-
-  function sortTasks(list) {
-    return list.slice().sort((a, b) => {
-      if (a.done !== b.done) return a.done ? 1 : -1; // faites en bas
-      const ra = a.remindAt || Infinity;
-      const rb = b.remindAt || Infinity;
-      if (ra !== rb) return ra - rb; // par echeance
-      return b.createdAt - a.createdAt; // recentes d'abord
-    });
-  }
-
-  function render() {
-    renderRoutine();
-    renderHabits();
-    renderHeader();
-
-    const list = $("#task-list");
-    list.innerHTML = "";
-    const visible = sortTasks(tasks.filter(matchesFilter));
-    $("#empty-state").classList.toggle("hidden", visible.length > 0);
-    for (const task of visible) list.appendChild(renderTask(task));
-  }
-
-  function renderTask(task) {
-    const li = document.createElement("li");
-    li.className = "task";
-    li.dataset.id = task.id;
-    if (task.done) li.classList.add("done");
-    else if (isLate(task)) li.classList.add("task-late");
-    else if (task.remindAt && isToday(task.remindAt)) li.classList.add("task-today");
-
-    const check = document.createElement("button");
-    check.type = "button";
-    check.className = "check";
-    check.innerHTML = "&#10003;";
-    check.setAttribute("aria-label", task.done ? "Marquer non faite" : "Marquer faite");
-    check.addEventListener("click", () => toggleDone(task.id));
-
-    const body = document.createElement("div");
-    body.className = "task-body";
-
-    const title = document.createElement("div");
-    title.className = "task-title";
-    title.textContent = task.title;
-    body.appendChild(title);
-
-    const meta = document.createElement("div");
-    meta.className = "task-meta";
-
-    if (task.remindAt) {
-      const due = document.createElement("span");
-      due.className = "task-tag tag-due";
-      if (isLate(task)) due.classList.add("is-late");
-      else if (isToday(task.remindAt) && !task.done) due.classList.add("is-today");
-      due.innerHTML =
-        (isLate(task) ? "&#9888; " : "&#128337; ") + escapeHtml(formatDue(task.remindAt));
-      meta.appendChild(due);
-
-      if (task.synced && !task.done) {
-        const bell = document.createElement("span");
-        bell.className = "task-tag tag-bell";
-        bell.innerHTML = "&#128276;";
-        bell.title = "Rappel push actif";
-        meta.appendChild(bell);
-      }
-    }
-
-    if (task.category) {
-      const cat = document.createElement("span");
-      cat.className = "task-tag tag-cat";
-      cat.textContent = task.category;
-      meta.appendChild(cat);
-    }
-
-    if (meta.children.length) body.appendChild(meta);
-
-    const actions = document.createElement("div");
-    actions.className = "task-actions";
-
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "mini-btn";
-    editBtn.innerHTML = "&#9998;";
-    editBtn.setAttribute("aria-label", "Modifier");
-    editBtn.addEventListener("click", () => openEdit(task.id));
-
-    const delBtn = document.createElement("button");
-    delBtn.type = "button";
-    delBtn.className = "mini-btn del";
-    delBtn.innerHTML = "&#128465;";
-    delBtn.setAttribute("aria-label", "Supprimer");
-    delBtn.addEventListener("click", () => removeTask(task.id));
-
-    actions.append(editBtn, delBtn);
-    li.append(check, body, actions);
-    return li;
-  }
-
   function renderHeader() {
     $("#today-label").textContent = new Date().toLocaleDateString("fr-FR", {
       weekday: "long",
       day: "numeric",
       month: "long",
     });
+  }
 
-    const lateCount = tasks.filter((t) => isLate(t)).length;
-    const todayCount = tasks.filter(
-      (t) => t.remindAt && isToday(t.remindAt) && !t.done && t.remindAt >= Date.now()
-    ).length;
-
-    const badges = $("#badges");
-    badges.innerHTML = "";
-    if (lateCount > 0) {
-      const b = document.createElement("span");
-      b.className = "badge late";
-      b.textContent = `${lateCount} en retard`;
-      badges.appendChild(b);
-    }
-    if (todayCount > 0) {
-      const b = document.createElement("span");
-      b.className = "badge today";
-      b.textContent = `${todayCount} pour aujourd'hui`;
-      badges.appendChild(b);
-    }
+  function render() {
+    renderHeader();
+    renderGroups();
+    renderHabits();
   }
 
   // ----------------------------------------------------------------
-  // Taches ponctuelles : actions
-  // ----------------------------------------------------------------
-  function addTask(title, remindAt, category) {
-    const task = {
-      id: uid(),
-      title: title.trim(),
-      remindAt: remindAt || null,
-      category: (category || "").trim() || null,
-      done: false,
-      synced: false,
-      createdAt: Date.now(),
-    };
-    tasks.push(task);
-    saveTasks();
-    render();
-    syncReminder(task);
-  }
-
-  function toggleDone(id) {
-    const task = tasks.find((t) => t.id === id);
-    if (!task) return;
-    task.done = !task.done;
-    saveTasks();
-    if (task.done) cancelReminder(task);
-    else syncReminder(task);
-    render();
-  }
-
-  function removeTask(id) {
-    const task = tasks.find((t) => t.id === id);
-    if (!task) return;
-    const el = $(`.task[data-id="${id}"]`);
-    cancelReminder(task);
-    const finish = () => {
-      tasks = tasks.filter((t) => t.id !== id);
-      saveTasks();
-      render();
-    };
-    if (el) {
-      el.classList.add("removing");
-      setTimeout(finish, 250);
-    } else {
-      finish();
-    }
-  }
-
-  function clearDone() {
-    const done = tasks.filter((t) => t.done);
-    if (done.length === 0) {
-      showToast("Aucune tache faite a supprimer");
-      return;
-    }
-    done.forEach(cancelReminder);
-    tasks = tasks.filter((t) => !t.done);
-    saveTasks();
-    render();
-    showToast(`${done.length} tache(s) supprimee(s)`);
-  }
-
-  // ----------------------------------------------------------------
-  // Modale d'edition
-  // ----------------------------------------------------------------
-  function openEdit(id) {
-    const task = tasks.find((t) => t.id === id);
-    if (!task) return;
-    $("#edit-id").value = task.id;
-    $("#edit-title").value = task.title;
-    $("#edit-due").value = tsToLocalInput(task.remindAt);
-    $("#edit-cat").value = task.category || "";
-    $("#edit-modal").classList.remove("hidden");
-  }
-
-  function closeEdit() {
-    $("#edit-modal").classList.add("hidden");
-  }
-
-  function saveEdit(e) {
-    e.preventDefault();
-    const id = $("#edit-id").value;
-    const task = tasks.find((t) => t.id === id);
-    if (!task) return;
-    task.title = $("#edit-title").value.trim();
-    task.remindAt = localInputToTs($("#edit-due").value);
-    task.category = $("#edit-cat").value.trim() || null;
-    saveTasks();
-    closeEdit();
-    render();
-    if (task.remindAt && !task.done) syncReminder(task, true);
-    else cancelReminder(task);
-  }
-
-  // ----------------------------------------------------------------
-  // Notifications push : abonnement
+  // Notifications push : abonnement + test
   // ----------------------------------------------------------------
   function urlBase64ToUint8Array(base64String) {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -653,7 +413,6 @@
     const testBtn = $("#test-notif");
 
     const granted = notifSupported() && Notification.permission === "granted";
-    // le bouton de test n'a de sens qu'une fois les notifications activees
     testBtn.classList.toggle("hidden", !granted);
 
     if (!notifSupported()) {
@@ -720,10 +479,6 @@
 
       showToast("Notifications activees");
       updateNotifBanner();
-
-      tasks
-        .filter((t) => t.remindAt && !t.done)
-        .forEach((t) => syncReminder(t, true));
     } catch (err) {
       console.error(err);
       showToast("Echec de l'activation des notifications");
@@ -732,7 +487,6 @@
     }
   }
 
-  // envoie un push de test immediat (diagnostic)
   async function testNotification() {
     if (!notifSupported() || Notification.permission !== "granted") {
       showToast("Active d'abord les notifications");
@@ -762,51 +516,6 @@
   }
 
   // ----------------------------------------------------------------
-  // Synchronisation des rappels avec le serveur
-  // ----------------------------------------------------------------
-  async function syncReminder(task, force = false) {
-    if (!task.remindAt || task.done) return;
-    if (!notifSupported() || Notification.permission !== "granted") return;
-    if (task.synced && !force) return;
-
-    try {
-      const res = await fetch("/api/reminders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId: deviceId(),
-          id: task.id,
-          titre: task.title,
-          remindAt: task.remindAt,
-        }),
-      });
-      if (res.ok) {
-        task.synced = true;
-        saveTasks();
-        render();
-      }
-    } catch (err) {
-      console.warn("syncReminder echoue (hors-ligne ?)", err);
-    }
-  }
-
-  async function cancelReminder(task) {
-    if (!task.synced) return;
-    try {
-      await fetch(
-        `/api/reminders?deviceId=${encodeURIComponent(
-          deviceId()
-        )}&id=${encodeURIComponent(task.id)}`,
-        { method: "DELETE" }
-      );
-    } catch (err) {
-      console.warn("cancelReminder echoue", err);
-    }
-    task.synced = false;
-    saveTasks();
-  }
-
-  // ----------------------------------------------------------------
   // Service worker + config
   // ----------------------------------------------------------------
   async function registerSW() {
@@ -828,66 +537,6 @@
     } catch (err) {
       console.warn("config non chargee", err);
     }
-  }
-
-  // ----------------------------------------------------------------
-  // Branchement des evenements
-  // ----------------------------------------------------------------
-  function bindEvents() {
-    // ajout d'une tache ponctuelle
-    $("#add-form").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const title = $("#task-title").value;
-      if (!title.trim()) return;
-      const remindAt = localInputToTs($("#task-due").value);
-      const cat = $("#task-cat").value;
-      addTask(title, remindAt, cat);
-      e.target.reset();
-      $("#task-title").focus();
-    });
-
-    // ajout d'une tache fixe (routine)
-    $("#daily-add-form").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const input = $("#daily-input");
-      addRoutine(input.value);
-      input.value = "";
-      input.focus();
-    });
-
-    // filtres
-    $("#filters").addEventListener("click", (e) => {
-      const btn = e.target.closest(".filter");
-      if (!btn) return;
-      $$(".filter").forEach((f) => f.classList.remove("active"));
-      btn.classList.add("active");
-      currentFilter = btn.dataset.filter;
-      render();
-    });
-
-    // modale d'edition
-    $("#edit-form").addEventListener("submit", saveEdit);
-    $("#edit-cancel").addEventListener("click", closeEdit);
-    $("#edit-modal").addEventListener("click", (e) => {
-      if (e.target.id === "edit-modal") closeEdit();
-    });
-
-    // nettoyage
-    $("#clear-done").addEventListener("click", clearDone);
-
-    // notifications
-    $("#enable-notif").addEventListener("click", enableNotifications);
-    $("#test-notif").addEventListener("click", testNotification);
-
-    // rafraichir badges/retards + reset routine a minuit, periodiquement
-    setInterval(() => {
-      if (!document.hidden) render();
-    }, 30_000);
-
-    // au retour au premier plan, recalculer (changement de jour possible)
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) render();
-    });
   }
 
   // ----------------------------------------------------------------
@@ -929,12 +578,10 @@
       const el = $("#splash");
       if (!el) return;
 
-      // citation aleatoire a chaque lancement
       const q = QUOTES[Math.floor(Math.random() * QUOTES.length)];
       $("#splash-quote").textContent = "« " + q.text + " »";
       $("#splash-author").textContent = q.author ? "— " + q.author : "";
 
-      // demarre la barre de progression (5s) en synchro avec le minuteur
       el.classList.add("counting");
 
       let ready = false;
@@ -946,7 +593,7 @@
       const timer = setTimeout(unlock, 5000);
 
       const dismiss = () => {
-        if (!ready) return; // bloque tant que les 5s ne sont pas ecoulees
+        if (!ready) return;
         clearTimeout(timer);
         el.classList.add("closing");
         el.removeEventListener("click", dismiss);
@@ -957,15 +604,43 @@
   };
 
   // ----------------------------------------------------------------
+  // Branchement des evenements
+  // ----------------------------------------------------------------
+  function bindEvents() {
+    // formulaires d'ajout de chaque groupe
+    document.querySelectorAll(".daily-add").forEach((form) => {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const key = form.dataset.add;
+        const input = form.querySelector(".daily-input");
+        addItem(key, input.value);
+        input.value = "";
+        input.focus();
+      });
+    });
+
+    // notifications
+    $("#enable-notif").addEventListener("click", enableNotifications);
+    $("#test-notif").addEventListener("click", testNotification);
+
+    // recalcul periodique + au retour au premier plan (changement de jour)
+    setInterval(() => {
+      if (!document.hidden) render();
+    }, 30_000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) render();
+    });
+  }
+
+  // ----------------------------------------------------------------
   // Demarrage
   // ----------------------------------------------------------------
   function start() {
     Splash.start();
-    loadTasks();
-    loadRoutine();
+    loadGroups();
     loadHistory();
-    loadRoutineState();
-    recordHabitToday(); // s'assure que le jour courant a une entree
+    loadGroupsState();
+    recordHabitToday();
     bindEvents();
     render();
     registerSW();

@@ -14,16 +14,15 @@ quand l'app est fermée**.
 
 ## Fonctionnalités
 
-- ✅ **To-do list** : ajouter / éditer / supprimer une tâche, la cocher, lui
-  donner une **date + heure d'échéance** et une **catégorie**.
-- 🔁 **Routine du jour** : des **tâches fixes** que l'on coche chaque jour et qui
-  **se remettent à zéro automatiquement** le lendemain (ajout / renommage /
-  suppression directement dans l'app).
-- 📵 **Hors-ligne** : les tâches sont stockées en **localStorage** (sur l'appareil).
-- 🔔 **Notifications push iOS** : à l'heure d'échéance, une notif arrive même app
-  fermée (rappel synchronisé avec le serveur).
-- 🏷️ **Rappels in-app** : badges « X en retard / X pour aujourd'hui »,
-  surlignage des tâches du jour et en retard.
+- 🔁 **Habitudes quotidiennes** en groupes (**Matin**, **Journée**,
+  **Notifications**) : des cases à cocher qui **se remettent à zéro chaque jour**
+  (ajout / renommage / suppression directement dans l'app).
+- 📊 **Graphique de réussite** : le pourcentage d'habitudes (Matin + Journée)
+  effectuées sur les 7 derniers jours, avec moyenne, pour garder le cap.
+- 📵 **Hors-ligne** : les habitudes sont stockées en **localStorage** (sur l'appareil).
+- 🔔 **Notifications push iOS** : abonnement + bouton de test ; l'infra serveur
+  (web-push + cron) est prête pour des rappels planifiés.
+- 💬 **Écran d'accueil** : une citation de motivation à chaque lancement (5 s).
 - 🎨 **Design** mobile-first, **thème clair** épuré (fond blanc, gris clairs,
   accent anthracite), animations douces.
 
@@ -35,7 +34,7 @@ quand l'app est fermée**.
 .
 ├── index.html            # Interface (PWA)
 ├── style.css             # Thème clair (blanc / gris / anthracite)
-├── app.js                # Logique : tâches, routine du jour, push, synchro
+├── app.js                # Logique : habitudes (groupes), graphique, push
 ├── sw.js                 # Service worker à la RACINE (push + cache hors-ligne)
 ├── manifest.json         # Manifeste PWA (obligatoire pour installer + push iOS)
 ├── icons/                # Icônes générées (192, 512, maskable, apple-touch)
