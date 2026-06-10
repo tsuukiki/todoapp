@@ -1,7 +1,7 @@
 /* ================================================================
    Ma To-Do — logique de l'application (frontend)
-   - Verrouillage par code PIN (confidentialite legere, cote client)
-   - Taches en localStorage (hors-ligne, privees sur l'appareil)
+   - Taches ponctuelles en localStorage (hors-ligne, privees sur l'appareil)
+   - Routine du jour : taches fixes qui se remettent a zero chaque jour
    - Notifications push iOS (PWA) : abonnement + synchro des rappels
    ================================================================ */
 
@@ -15,18 +15,27 @@
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
   const STORAGE_TASKS = "todo.tasks.v1";
-  const STORAGE_PIN = "todo.pinHash.v1";
-  const STORAGE_PIN_LEN = "todo.pinLen.v1";
   const STORAGE_DEVICE = "todo.deviceId.v1";
+  const STORAGE_ROUTINE = "todo.routine.v1"; // modeles de taches fixes
+  const STORAGE_ROUTINE_STATE = "todo.routineState.v1"; // { date, done:{id:true} }
 
   let tasks = [];
+  let routine = []; // [{ id, label }]
+  let routineState = { date: "", done: {} };
   let currentFilter = "all";
   let vapidPublicKey = null;
 
+  // 5 taches fixes d'exemple (a renommer/garder selon tes envies)
+  const DEFAULT_ROUTINE = [
+    "Boire un grand verre d'eau",
+    "10 minutes de lecture",
+    "Faire le lit",
+    "Marcher 30 minutes",
+    "Verifier les e-mails pro",
+  ];
+
   function uid() {
-    return (
-      Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-    );
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
   // Identifiant d'appareil stable (pour relier l'abonnement push cote serveur)
@@ -43,8 +52,7 @@
     const t = $("#toast");
     t.textContent = msg;
     t.classList.remove("hidden");
-    // forcer le reflow pour rejouer la transition
-    void t.offsetWidth;
+    void t.offsetWidth; // forcer le reflow pour rejouer la transition
     t.classList.add("show");
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => {
@@ -53,12 +61,14 @@
     }, 2600);
   }
 
-  async function sha256(text) {
-    const data = new TextEncoder().encode(text);
-    const buf = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    })[c]);
   }
 
   // ----------------------------------------------------------------
@@ -71,12 +81,18 @@
   }
 
   function isToday(ts) {
-    const now = new Date();
-    return startOfDay(ts) === startOfDay(now);
+    return startOfDay(ts) === startOfDay(new Date());
   }
 
   function isLate(task) {
     return task.remindAt && !task.done && task.remindAt < Date.now();
+  }
+
+  // cle du jour "YYYY-MM-DD" (heure locale)
+  function todayKey() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
   // valeur d'un <input datetime-local> -> timestamp (ms)
@@ -107,7 +123,7 @@
   }
 
   // ----------------------------------------------------------------
-  // Persistance des taches
+  // Persistance
   // ----------------------------------------------------------------
   function loadTasks() {
     try {
@@ -121,8 +137,154 @@
     localStorage.setItem(STORAGE_TASKS, JSON.stringify(tasks));
   }
 
+  function loadRoutine() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(STORAGE_ROUTINE) || "null");
+      if (Array.isArray(stored)) {
+        routine = stored;
+      } else {
+        // premiere fois : on installe les 5 taches d'exemple
+        routine = DEFAULT_ROUTINE.map((label) => ({ id: uid(), label }));
+        saveRoutine();
+      }
+    } catch {
+      routine = DEFAULT_ROUTINE.map((label) => ({ id: uid(), label }));
+    }
+  }
+
+  function saveRoutine() {
+    localStorage.setItem(STORAGE_ROUTINE, JSON.stringify(routine));
+  }
+
+  function loadRoutineState() {
+    try {
+      routineState = JSON.parse(
+        localStorage.getItem(STORAGE_ROUTINE_STATE) || "null"
+      ) || { date: "", done: {} };
+    } catch {
+      routineState = { date: "", done: {} };
+    }
+    ensureRoutineToday();
+  }
+
+  function saveRoutineState() {
+    localStorage.setItem(STORAGE_ROUTINE_STATE, JSON.stringify(routineState));
+  }
+
+  // remet la routine a zero si on a change de jour
+  function ensureRoutineToday() {
+    const key = todayKey();
+    if (routineState.date !== key) {
+      routineState = { date: key, done: {} };
+      saveRoutineState();
+    }
+  }
+
   // ----------------------------------------------------------------
-  // Rendu
+  // Routine du jour : rendu + actions
+  // ----------------------------------------------------------------
+  function renderRoutine() {
+    ensureRoutineToday();
+    const list = $("#daily-list");
+    list.innerHTML = "";
+
+    routine.forEach((item) => {
+      const done = !!routineState.done[item.id];
+      const li = document.createElement("li");
+      li.className = "daily-item" + (done ? " done" : "");
+      li.dataset.id = item.id;
+
+      const check = document.createElement("button");
+      check.type = "button";
+      check.className = "daily-check" + (done ? " checked" : "");
+      check.innerHTML = "&#10003;";
+      check.setAttribute("aria-label", done ? "Decocher" : "Cocher");
+      check.addEventListener("click", () => toggleRoutine(item.id));
+
+      const label = document.createElement("span");
+      label.className = "daily-label";
+      label.textContent = item.label;
+      // double-clic / clic sur le texte = renommer
+      label.addEventListener("click", () => startRenameRoutine(item.id, li));
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "daily-del";
+      del.innerHTML = "&#128465;";
+      del.setAttribute("aria-label", "Supprimer cette tache fixe");
+      del.addEventListener("click", () => deleteRoutine(item.id));
+
+      li.append(check, label, del);
+      list.appendChild(li);
+    });
+
+    // progression
+    const total = routine.length;
+    const doneCount = routine.filter((i) => routineState.done[i.id]).length;
+    const prog = $("#daily-progress");
+    prog.textContent = `${doneCount}/${total}`;
+    prog.classList.toggle("complete", total > 0 && doneCount === total);
+  }
+
+  function toggleRoutine(id) {
+    ensureRoutineToday();
+    if (routineState.done[id]) delete routineState.done[id];
+    else routineState.done[id] = true;
+    saveRoutineState();
+    renderRoutine();
+  }
+
+  function addRoutine(label) {
+    const text = label.trim();
+    if (!text) return;
+    routine.push({ id: uid(), label: text });
+    saveRoutine();
+    renderRoutine();
+  }
+
+  function deleteRoutine(id) {
+    routine = routine.filter((i) => i.id !== id);
+    delete routineState.done[id];
+    saveRoutine();
+    saveRoutineState();
+    renderRoutine();
+  }
+
+  function startRenameRoutine(id, li) {
+    const item = routine.find((i) => i.id === id);
+    if (!item || li.querySelector(".daily-rename")) return;
+
+    const label = li.querySelector(".daily-label");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "daily-rename";
+    input.maxLength = 80;
+    input.value = item.label;
+    label.replaceWith(input);
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    const commit = () => {
+      const val = input.value.trim();
+      if (val) {
+        item.label = val;
+        saveRoutine();
+      }
+      renderRoutine();
+    };
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        input.blur();
+      } else if (e.key === "Escape") {
+        renderRoutine();
+      }
+    });
+  }
+
+  // ----------------------------------------------------------------
+  // Taches ponctuelles : rendu
   // ----------------------------------------------------------------
   function matchesFilter(task) {
     switch (currentFilter) {
@@ -148,17 +310,14 @@
   }
 
   function render() {
+    renderRoutine();
+    renderHeader();
+
     const list = $("#task-list");
     list.innerHTML = "";
-
     const visible = sortTasks(tasks.filter(matchesFilter));
     $("#empty-state").classList.toggle("hidden", visible.length > 0);
-
-    for (const task of visible) {
-      list.appendChild(renderTask(task));
-    }
-
-    renderHeader();
+    for (const task of visible) list.appendChild(renderTask(task));
   }
 
   function renderTask(task) {
@@ -169,7 +328,6 @@
     else if (isLate(task)) li.classList.add("task-late");
     else if (task.remindAt && isToday(task.remindAt)) li.classList.add("task-today");
 
-    // case a cocher
     const check = document.createElement("button");
     check.type = "button";
     check.className = "check";
@@ -177,7 +335,6 @@
     check.setAttribute("aria-label", task.done ? "Marquer non faite" : "Marquer faite");
     check.addEventListener("click", () => toggleDone(task.id));
 
-    // corps
     const body = document.createElement("div");
     body.className = "task-body";
 
@@ -198,7 +355,6 @@
         (isLate(task) ? "&#9888; " : "&#128337; ") + escapeHtml(formatDue(task.remindAt));
       meta.appendChild(due);
 
-      // cloche : rappel synchronise avec le serveur
       if (task.synced && !task.done) {
         const bell = document.createElement("span");
         bell.className = "task-tag tag-bell";
@@ -217,7 +373,6 @@
 
     if (meta.children.length) body.appendChild(meta);
 
-    // actions
     const actions = document.createElement("div");
     actions.className = "task-actions";
 
@@ -241,15 +396,12 @@
   }
 
   function renderHeader() {
-    // libelle du jour
-    const today = new Date().toLocaleDateString("fr-FR", {
+    $("#today-label").textContent = new Date().toLocaleDateString("fr-FR", {
       weekday: "long",
       day: "numeric",
       month: "long",
     });
-    $("#today-label").textContent = today;
 
-    // badges
     const lateCount = tasks.filter((t) => isLate(t)).length;
     const todayCount = tasks.filter(
       (t) => t.remindAt && isToday(t.remindAt) && !t.done && t.remindAt >= Date.now()
@@ -271,18 +423,8 @@
     }
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    })[c]);
-  }
-
   // ----------------------------------------------------------------
-  // Actions sur les taches
+  // Taches ponctuelles : actions
   // ----------------------------------------------------------------
   function addTask(title, remindAt, category) {
     const task = {
@@ -305,7 +447,6 @@
     if (!task) return;
     task.done = !task.done;
     saveTasks();
-    // une tache faite n'a plus besoin de rappel serveur
     if (task.done) cancelReminder(task);
     else syncReminder(task);
     render();
@@ -370,7 +511,6 @@
     saveTasks();
     closeEdit();
     render();
-    // re-synchroniser le rappel (l'heure a pu changer)
     if (task.remindAt && !task.done) syncReminder(task, true);
     else cancelReminder(task);
   }
@@ -411,7 +551,6 @@
       banner.classList.add("hidden");
       return;
     }
-
     if (Notification.permission === "granted") {
       banner.classList.add("hidden");
       return;
@@ -419,7 +558,6 @@
 
     banner.classList.remove("hidden");
 
-    // iOS exige le mode "ecran d'accueil" (standalone)
     const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     if (iOS && !isStandalone()) {
       status.textContent =
@@ -471,10 +609,9 @@
       });
       if (!res.ok) throw new Error("subscribe HTTP " + res.status);
 
-      showToast("Notifications activees ✅");
+      showToast("Notifications activees");
       updateNotifBanner();
 
-      // re-synchroniser tous les rappels en attente
       tasks
         .filter((t) => t.remindAt && !t.done)
         .forEach((t) => syncReminder(t, true));
@@ -488,12 +625,10 @@
 
   // ----------------------------------------------------------------
   // Synchronisation des rappels avec le serveur
-  // (pour que le push parte meme app fermee)
   // ----------------------------------------------------------------
   async function syncReminder(task, force = false) {
     if (!task.remindAt || task.done) return;
     if (!notifSupported() || Notification.permission !== "granted") return;
-    // inutile de renvoyer si deja synchro et pas force
     if (task.synced && !force) return;
 
     try {
@@ -534,149 +669,7 @@
   }
 
   // ----------------------------------------------------------------
-  // Verrouillage par code PIN
-  // ----------------------------------------------------------------
-  const Pin = {
-    buffer: "",
-    mode: "unlock", // "unlock" | "create" | "confirm"
-    firstEntry: "",
-
-    async init() {
-      const hasPin = !!localStorage.getItem(STORAGE_PIN);
-      this.mode = hasPin ? "unlock" : "create";
-      this.buffer = "";
-      this.firstEntry = "";
-      this.show();
-      this.refreshLabels();
-      this.renderDots();
-    },
-
-    show() {
-      const ls = $("#lock-screen");
-      ls.classList.remove("hidden");
-      ls.setAttribute("aria-hidden", "false");
-      $("#app").style.display = "none";
-    },
-
-    hide() {
-      const ls = $("#lock-screen");
-      ls.classList.add("hidden");
-      ls.setAttribute("aria-hidden", "true");
-      $("#app").style.display = "";
-    },
-
-    refreshLabels() {
-      const title = $("#lock-title");
-      const sub = $("#lock-subtitle");
-      sub.classList.remove("error");
-      if (this.mode === "create") {
-        title.textContent = "Creez un code";
-        sub.textContent = "4 a 6 chiffres pour proteger l'app";
-      } else if (this.mode === "confirm") {
-        title.textContent = "Confirmez le code";
-        sub.textContent = "Saisissez a nouveau le meme code";
-      } else {
-        title.textContent = "Entrez votre code";
-        sub.textContent = "Code a 4 a 6 chiffres";
-      }
-    },
-
-    renderDots() {
-      const dots = $$("#pin-dots span");
-      dots.forEach((d, i) => d.classList.toggle("filled", i < this.buffer.length));
-      // en creation/confirmation on autorise jusqu'a 6, bouton valider des 4
-      const showValidate =
-        this.buffer.length >= 4 &&
-        (this.mode === "create" || this.mode === "confirm");
-      $("#pin-validate").classList.toggle("hidden", !showValidate);
-    },
-
-    press(key) {
-      if (key === "del") {
-        this.buffer = this.buffer.slice(0, -1);
-        this.renderDots();
-        return;
-      }
-      if (key === "cancel") {
-        this.buffer = "";
-        if (this.mode === "confirm") {
-          this.mode = "create";
-          this.firstEntry = "";
-          this.refreshLabels();
-        }
-        this.renderDots();
-        return;
-      }
-      if (this.buffer.length >= 6) return;
-      this.buffer += key;
-      this.renderDots();
-
-      // en mode "unlock", on valide automatiquement des qu'on atteint la
-      // longueur du code enregistre (ou 6 par securite).
-      if (this.mode === "unlock") {
-        const expectedLen = Number(localStorage.getItem(STORAGE_PIN_LEN)) || 6;
-        if (this.buffer.length >= expectedLen) this.tryUnlock();
-      }
-    },
-
-    async tryUnlock() {
-      const hash = await sha256(this.buffer);
-      const stored = localStorage.getItem(STORAGE_PIN);
-      if (hash === stored) {
-        this.hide();
-      } else {
-        this.fail("Code incorrect");
-      }
-    },
-
-    async validateCreate() {
-      if (this.buffer.length < 4) return;
-      if (this.mode === "create") {
-        this.firstEntry = this.buffer;
-        this.buffer = "";
-        this.mode = "confirm";
-        this.refreshLabels();
-        this.renderDots();
-      } else if (this.mode === "confirm") {
-        if (this.buffer === this.firstEntry) {
-          const hash = await sha256(this.buffer);
-          localStorage.setItem(STORAGE_PIN, hash);
-          localStorage.setItem(STORAGE_PIN_LEN, String(this.buffer.length));
-          showToast("Code enregistre ✅");
-          this.hide();
-        } else {
-          this.mode = "create";
-          this.firstEntry = "";
-          this.buffer = "";
-          this.fail("Les codes ne correspondent pas");
-        }
-      }
-    },
-
-    fail(msg) {
-      const sub = $("#lock-subtitle");
-      sub.textContent = msg;
-      sub.classList.add("error");
-      this.buffer = "";
-      const dots = $("#pin-dots");
-      dots.classList.add("shake");
-      setTimeout(() => dots.classList.remove("shake"), 400);
-      this.renderDots();
-      this.refreshLabelsAfterFail();
-    },
-
-    refreshLabelsAfterFail() {
-      // garder le message d'erreur visible un instant
-      setTimeout(() => this.refreshLabels(), 1400);
-    },
-  };
-
-  function lockNow() {
-    Pin.init();
-  }
-
-  // ----------------------------------------------------------------
-  // Service worker
+  // Service worker + config
   // ----------------------------------------------------------------
   async function registerSW() {
     if (!("serviceWorker" in navigator)) return;
@@ -703,7 +696,7 @@
   // Branchement des evenements
   // ----------------------------------------------------------------
   function bindEvents() {
-    // formulaire d'ajout
+    // ajout d'une tache ponctuelle
     $("#add-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const title = $("#task-title").value;
@@ -713,6 +706,15 @@
       addTask(title, remindAt, cat);
       e.target.reset();
       $("#task-title").focus();
+    });
+
+    // ajout d'une tache fixe (routine)
+    $("#daily-add-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = $("#daily-input");
+      addRoutine(input.value);
+      input.value = "";
+      input.focus();
     });
 
     // filtres
@@ -738,44 +740,26 @@
     // notifications
     $("#enable-notif").addEventListener("click", enableNotifications);
 
-    // verrouillage manuel
-    $("#lock-now").addEventListener("click", lockNow);
-
-    // pave PIN
-    $("#pin-pad").addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-key]");
-      if (btn) Pin.press(btn.dataset.key);
-    });
-    $("#pin-validate").addEventListener("click", () => Pin.validateCreate());
-
-    // re-verrouiller quand l'app passe en arriere-plan longtemps
-    let hiddenAt = 0;
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        hiddenAt = Date.now();
-      } else if (
-        localStorage.getItem(STORAGE_PIN) &&
-        hiddenAt &&
-        Date.now() - hiddenAt > 60_000 // re-verrouille apres 1 min en arriere-plan
-      ) {
-        Pin.init();
-      }
-    });
-
-    // rafraichir l'etat des badges / retards periodiquement
+    // rafraichir badges/retards + reset routine a minuit, periodiquement
     setInterval(() => {
       if (!document.hidden) render();
     }, 30_000);
+
+    // au retour au premier plan, recalculer (changement de jour possible)
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) render();
+    });
   }
 
   // ----------------------------------------------------------------
   // Demarrage
   // ----------------------------------------------------------------
-  async function start() {
+  function start() {
     loadTasks();
+    loadRoutine();
+    loadRoutineState();
     bindEvents();
     render();
-    await Pin.init();
     registerSW();
     loadConfig();
     updateNotifBanner();

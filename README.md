@@ -16,15 +16,16 @@ quand l'app est fermée**.
 
 - ✅ **To-do list** : ajouter / éditer / supprimer une tâche, la cocher, lui
   donner une **date + heure d'échéance** et une **catégorie**.
-- 🔒 **Écran de verrouillage par code PIN** (4–6 chiffres) au lancement
-  (confidentialité légère, l'URL est publique).
+- 🔁 **Routine du jour** : des **tâches fixes** que l'on coche chaque jour et qui
+  **se remettent à zéro automatiquement** le lendemain (ajout / renommage /
+  suppression directement dans l'app).
 - 📵 **Hors-ligne** : les tâches sont stockées en **localStorage** (sur l'appareil).
 - 🔔 **Notifications push iOS** : à l'heure d'échéance, une notif arrive même app
   fermée (rappel synchronisé avec le serveur).
 - 🏷️ **Rappels in-app** : badges « X en retard / X pour aujourd'hui »,
   surlignage des tâches du jour et en retard.
-- 🌙 **Design** mobile-first, mode sombre élégant (esprit BliiX : fond `#282528`,
-  accents dorés `#C9A84C → #E0C878`), animations douces.
+- 🎨 **Design** mobile-first, **thème clair** épuré (fond blanc, gris clairs,
+  accent anthracite), animations douces.
 
 ---
 
@@ -33,8 +34,8 @@ quand l'app est fermée**.
 ```
 .
 ├── index.html            # Interface (PWA)
-├── style.css             # Thème sombre BliiX
-├── app.js                # Logique : tâches, PIN, push, synchro rappels
+├── style.css             # Thème clair (blanc / gris / anthracite)
+├── app.js                # Logique : tâches, routine du jour, push, synchro
 ├── sw.js                 # Service worker à la RACINE (push + cache hors-ligne)
 ├── manifest.json         # Manifeste PWA (obligatoire pour installer + push iOS)
 ├── icons/                # Icônes générées (192, 512, maskable, apple-touch)

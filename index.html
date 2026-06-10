@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#282528" />
+  <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Ma to-do list personnelle avec rappels push." />
 
   <!-- PWA / iOS -->
   <link rel="manifest" href="/manifest.json" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="To-Do" />
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="/icons/favicon.png" />
@@ -20,43 +20,11 @@
 </head>
 <body>
 
-  <!-- ====== ECRAN DE VERROUILLAGE PAR CODE PIN ====== -->
-  <div id="lock-screen" class="lock-screen hidden" aria-hidden="true">
-    <div class="lock-card">
-      <div class="lock-logo" aria-hidden="true">
-        <img src="/icons/icon-192.png" alt="" width="72" height="72" />
-      </div>
-      <h1 id="lock-title" class="lock-title">Entrez votre code</h1>
-      <p id="lock-subtitle" class="lock-subtitle">Code a 4 a 6 chiffres</p>
-
-      <div class="pin-dots" id="pin-dots" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span><span></span>
-      </div>
-
-      <div class="pin-pad" id="pin-pad">
-        <button type="button" data-key="1">1</button>
-        <button type="button" data-key="2">2</button>
-        <button type="button" data-key="3">3</button>
-        <button type="button" data-key="4">4</button>
-        <button type="button" data-key="5">5</button>
-        <button type="button" data-key="6">6</button>
-        <button type="button" data-key="7">7</button>
-        <button type="button" data-key="8">8</button>
-        <button type="button" data-key="9">9</button>
-        <button type="button" class="pin-action" data-key="cancel">&#10005;</button>
-        <button type="button" data-key="0">0</button>
-        <button type="button" class="pin-action" data-key="del">&#9003;</button>
-      </div>
-      <button type="button" id="pin-validate" class="pin-validate hidden">Valider</button>
-    </div>
-  </div>
-
   <!-- ====== APPLICATION ====== -->
   <div id="app" class="app">
     <header class="app-header">
       <div class="app-header-row">
         <h1 class="app-title">Ma To-Do</h1>
-        <button type="button" id="lock-now" class="icon-btn" title="Verrouiller" aria-label="Verrouiller">&#128274;</button>
       </div>
       <p id="today-label" class="today-label"></p>
       <div id="badges" class="badges"></div>
@@ -68,11 +36,27 @@
         <strong>Notifications push</strong>
         <span id="notif-status">Activez les rappels meme quand l'app est fermee.</span>
       </div>
-      <button type="button" id="enable-notif" class="btn-gold">Activer les notifications</button>
+      <button type="button" id="enable-notif" class="btn-primary">Activer les notifications</button>
     </div>
 
+    <!-- ====== ROUTINE DU JOUR (taches fixes, remise a zero chaque jour) ====== -->
+    <section class="card routine">
+      <div class="routine-head">
+        <h2 class="section-title">Routine du jour</h2>
+        <span id="daily-progress" class="daily-progress">0/0</span>
+      </div>
+      <ul id="daily-list" class="daily-list"></ul>
+      <form id="daily-add-form" class="daily-add" autocomplete="off">
+        <input type="text" id="daily-input" class="daily-input" placeholder="Ajouter une tache fixe..." maxlength="80" />
+        <button type="submit" class="btn-add-sm" aria-label="Ajouter a la routine">+</button>
+      </form>
+    </section>
+
+    <!-- ====== TACHES PONCTUELLES ====== -->
+    <h2 class="section-title section-title-spaced">Mes taches</h2>
+
     <!-- Formulaire d'ajout -->
-    <form id="add-form" class="add-form" autocomplete="off">
+    <form id="add-form" class="add-form card" autocomplete="off">
       <input
         type="text"
         id="task-title"
@@ -125,7 +109,7 @@
         </label>
         <div class="modal-actions">
           <button type="button" id="edit-cancel" class="btn-ghost">Annuler</button>
-          <button type="submit" class="btn-gold">Enregistrer</button>
+          <button type="submit" class="btn-primary">Enregistrer</button>
         </div>
       </form>
     </div>
