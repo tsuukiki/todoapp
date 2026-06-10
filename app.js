@@ -650,6 +650,11 @@
     const banner = $("#notif-banner");
     const status = $("#notif-status");
     const btn = $("#enable-notif");
+    const testBtn = $("#test-notif");
+
+    const granted = notifSupported() && Notification.permission === "granted";
+    // le bouton de test n'a de sens qu'une fois les notifications activees
+    testBtn.classList.toggle("hidden", !granted);
 
     if (!notifSupported()) {
       banner.classList.add("hidden");
@@ -724,6 +729,35 @@
       showToast("Echec de l'activation des notifications");
     } finally {
       updateNotifBanner();
+    }
+  }
+
+  // envoie un push de test immediat (diagnostic)
+  async function testNotification() {
+    if (!notifSupported() || Notification.permission !== "granted") {
+      showToast("Active d'abord les notifications");
+      return;
+    }
+    const btn = $("#test-notif");
+    btn.disabled = true;
+    showToast("Envoi du test...");
+    try {
+      const res = await fetch("/api/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId: deviceId() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        showToast("Push envoye ! Verrouille l'ecran pour le voir arriver.");
+      } else {
+        showToast("Echec : " + (data.error || data.status || res.status));
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Erreur reseau (pas de connexion ?)");
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -843,6 +877,7 @@
 
     // notifications
     $("#enable-notif").addEventListener("click", enableNotifications);
+    $("#test-notif").addEventListener("click", testNotification);
 
     // rafraichir badges/retards + reset routine a minuit, periodiquement
     setInterval(() => {

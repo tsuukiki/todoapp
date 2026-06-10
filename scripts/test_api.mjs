@@ -82,6 +82,7 @@ const { default: subscribe } = await import("../api/subscribe.js");
 const { default: reminders } = await import("../api/reminders.js");
 const { default: tick } = await import("../api/tick.js");
 const { default: config } = await import("../api/config.js");
+const { default: testPush } = await import("../api/test.js");
 
 let pass = 0;
 function ok(name) { console.log("  ✓", name); pass++; }
@@ -179,6 +180,26 @@ const futureId = "task-future";
   await tick(makeReq({ method: "GET", query: { secret: "secret-test-123" } }), res);
   assert.equal(res.body.sent, 0);
   ok("GET /api/tick ne fait rien quand aucun rappel n'est echu");
+}
+
+// 11) /api/test envoie un push immediat a l'appareil abonne
+{
+  const before = sentPushes.length;
+  const res = makeRes();
+  await testPush(makeReq({ method: "POST", body: { deviceId: DEVICE } }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(sentPushes.length, before + 1);
+  ok("POST /api/test envoie un push de test immediat");
+}
+
+// 12) /api/test sans abonnement renvoie 404 explicite
+{
+  const res = makeRes();
+  await testPush(makeReq({ method: "POST", body: { deviceId: "inconnu" } }), res);
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.body.ok, false);
+  ok("POST /api/test renvoie 404 si l'appareil n'est pas abonne");
 }
 
 console.log(`\n${pass} tests OK ✅`);
