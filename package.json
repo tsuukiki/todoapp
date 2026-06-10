@@ -1,0 +1,15 @@
+{
+  "name": "todo-pwa-push",
+  "version": "1.0.0",
+  "private": true,
+  "description": "To-do list personnelle (PWA) avec notifications push planifiees, hebergee sur Vercel.",
+  "type": "module",
+  "scripts": {
+    "gen:vapid": "web-push generate-vapid-keys",
+    "gen:icons": "python3 scripts/gen_icons.py"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.3",
+    "web-push": "^3.6.7"
+  }
+}

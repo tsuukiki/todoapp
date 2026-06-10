@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#282528" />
+  <meta name="description" content="Ma to-do list personnelle avec rappels push." />
+
+  <!-- PWA / iOS -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="To-Do" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" href="/icons/favicon.png" />
+
+  <link rel="stylesheet" href="/style.css" />
+  <title>Ma To-Do</title>
+</head>
+<body>
+
+  <!-- ====== ECRAN DE VERROUILLAGE PAR CODE PIN ====== -->
+  <div id="lock-screen" class="lock-screen hidden" aria-hidden="true">
+    <div class="lock-card">
+      <div class="lock-logo" aria-hidden="true">
+        <img src="/icons/icon-192.png" alt="" width="72" height="72" />
+      </div>
+      <h1 id="lock-title" class="lock-title">Entrez votre code</h1>
+      <p id="lock-subtitle" class="lock-subtitle">Code a 4 a 6 chiffres</p>
+
+      <div class="pin-dots" id="pin-dots" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+
+      <div class="pin-pad" id="pin-pad">
+        <button type="button" data-key="1">1</button>
+        <button type="button" data-key="2">2</button>
+        <button type="button" data-key="3">3</button>
+        <button type="button" data-key="4">4</button>
+        <button type="button" data-key="5">5</button>
+        <button type="button" data-key="6">6</button>
+        <button type="button" data-key="7">7</button>
+        <button type="button" data-key="8">8</button>
+        <button type="button" data-key="9">9</button>
+        <button type="button" class="pin-action" data-key="cancel">&#10005;</button>
+        <button type="button" data-key="0">0</button>
+        <button type="button" class="pin-action" data-key="del">&#9003;</button>
+      </div>
+      <button type="button" id="pin-validate" class="pin-validate hidden">Valider</button>
+    </div>
+  </div>
+
+  <!-- ====== APPLICATION ====== -->
+  <div id="app" class="app">
+    <header class="app-header">
+      <div class="app-header-row">
+        <h1 class="app-title">Ma To-Do</h1>
+        <button type="button" id="lock-now" class="icon-btn" title="Verrouiller" aria-label="Verrouiller">&#128274;</button>
+      </div>
+      <p id="today-label" class="today-label"></p>
+      <div id="badges" class="badges"></div>
+    </header>
+
+    <!-- Banniere notifications -->
+    <div id="notif-banner" class="notif-banner hidden">
+      <div class="notif-text">
+        <strong>Notifications push</strong>
+        <span id="notif-status">Activez les rappels meme quand l'app est fermee.</span>
+      </div>
+      <button type="button" id="enable-notif" class="btn-gold">Activer les notifications</button>
+    </div>
+
+    <!-- Formulaire d'ajout -->
+    <form id="add-form" class="add-form" autocomplete="off">
+      <input
+        type="text"
+        id="task-title"
+        class="input-title"
+        placeholder="Nouvelle tache..."
+        maxlength="200"
+        required
+      />
+      <div class="add-form-row">
+        <input type="datetime-local" id="task-due" class="input-due" />
+        <input type="text" id="task-cat" class="input-cat" placeholder="Categorie" maxlength="30" />
+        <button type="submit" class="btn-add" aria-label="Ajouter">+</button>
+      </div>
+    </form>
+
+    <!-- Filtres -->
+    <div class="filters" id="filters">
+      <button type="button" class="filter active" data-filter="all">Toutes</button>
+      <button type="button" class="filter" data-filter="today">Aujourd'hui</button>
+      <button type="button" class="filter" data-filter="late">En retard</button>
+      <button type="button" class="filter" data-filter="done">Faites</button>
+    </div>
+
+    <!-- Liste des taches -->
+    <ul id="task-list" class="task-list"></ul>
+    <p id="empty-state" class="empty-state hidden">Aucune tache ici. Profitez-en ! &#127880;</p>
+
+    <footer class="app-footer">
+      <button type="button" id="clear-done" class="btn-ghost">Supprimer les taches faites</button>
+    </footer>
+  </div>
+
+  <!-- ====== MODALE D'EDITION ====== -->
+  <div id="edit-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card">
+      <h2 class="modal-title">Modifier la tache</h2>
+      <form id="edit-form">
+        <input type="hidden" id="edit-id" />
+        <label class="field">
+          <span>Titre</span>
+          <input type="text" id="edit-title" maxlength="200" required />
+        </label>
+        <label class="field">
+          <span>Echeance (date + heure)</span>
+          <input type="datetime-local" id="edit-due" />
+        </label>
+        <label class="field">
+          <span>Categorie</span>
+          <input type="text" id="edit-cat" maxlength="30" placeholder="(optionnel)" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="edit-cancel" class="btn-ghost">Annuler</button>
+          <button type="submit" class="btn-gold">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
