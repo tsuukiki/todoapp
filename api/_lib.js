@@ -17,11 +17,14 @@ export function getRedis() {
   // Point d'injection pour les tests (ignore en production).
   if (globalThis.__TODO_REDIS__) return globalThis.__TODO_REDIS__;
   if (_redis) return _redis;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // On accepte les deux nommages possibles selon la facon de creer la base :
+  // - integration Upstash directe : UPSTASH_REDIS_REST_URL / _TOKEN
+  // - base creee via Vercel (Marketplace/KV) : KV_REST_API_URL / _TOKEN
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   if (!url || !token) {
     throw new Error(
-      "Variables Upstash manquantes (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN)."
+      "Variables Redis manquantes : ajoute une base Upstash/Redis (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN, ou KV_REST_API_URL + KV_REST_API_TOKEN)."
     );
   }
   _redis = new Redis({ url, token });
