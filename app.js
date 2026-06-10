@@ -18,10 +18,15 @@
   const STORAGE_DEVICE = "todo.deviceId.v1";
   const STORAGE_ROUTINE = "todo.routine.v1"; // modeles de taches fixes
   const STORAGE_ROUTINE_STATE = "todo.routineState.v1"; // { date, done:{id:true} }
+  const STORAGE_ROUTINE_HISTORY = "todo.routineHistory.v1"; // { "YYYY-MM-DD": {done,total} }
+
+  const HABIT_DAYS = 7; // nombre de jours affiches dans le graphique
+  const HISTORY_KEEP_DAYS = 90; // on ne garde pas un historique infini
 
   let tasks = [];
   let routine = []; // [{ id, label }]
   let routineState = { date: "", done: {} };
+  let routineHistory = {}; // historique des % de routine par jour
   let currentFilter = "all";
   let vapidPublicKey = null;
 
@@ -177,7 +182,38 @@
     if (routineState.date !== key) {
       routineState = { date: key, done: {} };
       saveRoutineState();
+      recordHabitToday(); // cree l'entree du nouveau jour (0%)
     }
+  }
+
+  // ---- Historique des habitudes (pour le graphique) ----
+  function loadHistory() {
+    try {
+      routineHistory = JSON.parse(
+        localStorage.getItem(STORAGE_ROUTINE_HISTORY) || "{}"
+      ) || {};
+    } catch {
+      routineHistory = {};
+    }
+  }
+
+  function saveHistory() {
+    // on elague l'historique trop ancien
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - HISTORY_KEEP_DAYS);
+    const min = cutoff.toISOString().slice(0, 10);
+    for (const k of Object.keys(routineHistory)) {
+      if (k < min) delete routineHistory[k];
+    }
+    localStorage.setItem(STORAGE_ROUTINE_HISTORY, JSON.stringify(routineHistory));
+  }
+
+  // enregistre l'etat du jour (mis a jour a chaque changement de routine)
+  function recordHabitToday() {
+    const total = routine.length;
+    const done = routine.filter((i) => routineState.done[i.id]).length;
+    routineHistory[todayKey()] = { done, total };
+    saveHistory();
   }
 
   // ----------------------------------------------------------------
@@ -226,12 +262,75 @@
     prog.classList.toggle("complete", total > 0 && doneCount === total);
   }
 
+  // ---- Graphique des habitudes : derniers jours en barres ----
+  function renderHabits() {
+    const chart = $("#habit-chart");
+    if (!chart) return;
+    chart.innerHTML = "";
+
+    const dayLabels = ["Di", "Lu", "Ma", "Me", "Je", "Ve", "Sa"];
+    const pad = (n) => String(n).padStart(2, "0");
+    const today = todayKey();
+
+    const pcts = []; // pour la moyenne (jours avec donnees)
+
+    for (let i = HABIT_DAYS - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const entry = routineHistory[key];
+      const hasData = entry && entry.total > 0;
+      const pct = hasData ? Math.round((entry.done / entry.total) * 100) : 0;
+      if (hasData) pcts.push(pct);
+
+      const col = document.createElement("div");
+      col.className = "habit-col" + (hasData ? "" : " empty") + (key === today ? " today" : "");
+
+      const pctEl = document.createElement("div");
+      pctEl.className = "habit-pct";
+      pctEl.textContent = hasData ? pct + "%" : "–";
+
+      const wrap = document.createElement("div");
+      wrap.className = "habit-barwrap";
+      const track = document.createElement("div");
+      track.className = "habit-track";
+      const bar = document.createElement("div");
+      bar.className = "habit-bar";
+      // hauteur appliquee apres insertion pour declencher la transition
+      requestAnimationFrame(() => {
+        bar.style.height = hasData ? pct + "%" : "0%";
+      });
+      track.appendChild(bar);
+      wrap.appendChild(track);
+
+      const dayEl = document.createElement("div");
+      dayEl.className = "habit-day";
+      dayEl.textContent = dayLabels[d.getDay()];
+
+      col.append(pctEl, wrap, dayEl);
+      chart.appendChild(col);
+    }
+
+    // moyenne sur les jours suivis
+    const avgEl = $("#habits-avg");
+    if (pcts.length) {
+      const avg = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+      avgEl.textContent = "Moy. " + avg + "%";
+      avgEl.classList.toggle("complete", avg === 100);
+    } else {
+      avgEl.textContent = "—";
+      avgEl.classList.remove("complete");
+    }
+  }
+
   function toggleRoutine(id) {
     ensureRoutineToday();
     if (routineState.done[id]) delete routineState.done[id];
     else routineState.done[id] = true;
     saveRoutineState();
+    recordHabitToday();
     renderRoutine();
+    renderHabits();
   }
 
   function addRoutine(label) {
@@ -239,7 +338,9 @@
     if (!text) return;
     routine.push({ id: uid(), label: text });
     saveRoutine();
+    recordHabitToday();
     renderRoutine();
+    renderHabits();
   }
 
   function deleteRoutine(id) {
@@ -247,7 +348,9 @@
     delete routineState.done[id];
     saveRoutine();
     saveRoutineState();
+    recordHabitToday();
     renderRoutine();
+    renderHabits();
   }
 
   function startRenameRoutine(id, li) {
@@ -311,6 +414,7 @@
 
   function render() {
     renderRoutine();
+    renderHabits();
     renderHeader();
 
     const list = $("#task-list");
@@ -824,7 +928,9 @@
     Splash.start();
     loadTasks();
     loadRoutine();
+    loadHistory();
     loadRoutineState();
+    recordHabitToday(); // s'assure que le jour courant a une entree
     bindEvents();
     render();
     registerSW();

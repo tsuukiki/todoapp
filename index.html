@@ -24,7 +24,6 @@
        Visible des le chargement. Bloque 5s, puis clic n'importe ou pour entrer. -->
   <div id="splash" class="splash">
     <div class="splash-inner">
-      <div class="splash-icon"><img src="/icons/icon-192.png" alt="" width="64" height="64" /></div>
       <blockquote class="splash-quote" id="splash-quote"></blockquote>
       <cite class="splash-author" id="splash-author"></cite>
     </div>
@@ -64,6 +63,15 @@
         <input type="text" id="daily-input" class="daily-input" placeholder="Ajouter une tache fixe..." maxlength="80" />
         <button type="submit" class="btn-add-sm" aria-label="Ajouter a la routine">+</button>
       </form>
+    </section>
+
+    <!-- ====== GRAPHIQUE DES HABITUDES ====== -->
+    <section class="card habits">
+      <div class="routine-head">
+        <h2 class="section-title">Mes habitudes</h2>
+        <span id="habits-avg" class="daily-progress">&mdash;</span>
+      </div>
+      <div id="habit-chart" class="habit-chart" aria-label="Pourcentage de routine effectuee par jour"></div>
     </section>
 
     <!-- ====== TACHES PONCTUELLES ====== -->

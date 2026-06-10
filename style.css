@@ -329,6 +329,92 @@ button {
   transform: scale(0.92);
 }
 
+/* ===================== GRAPHIQUE DES HABITUDES ===================== */
+.habits {
+  padding: 16px;
+  margin-bottom: 8px;
+}
+
+.habit-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+  height: 132px;
+  margin-top: 6px;
+}
+
+.habit-col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.habit-pct {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.habit-barwrap {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.habit-track {
+  position: relative;
+  width: 70%;
+  max-width: 26px;
+  height: 100%;
+  background: var(--bg-elev-2);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.habit-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  border-radius: 7px;
+  background: var(--accent-grad);
+  transition: height 0.5s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.habit-col.empty .habit-track {
+  background: var(--bg-elev-2);
+  opacity: 0.55;
+}
+
+.habit-col.today .habit-pct {
+  color: var(--text);
+}
+
+.habit-col.today .habit-day {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.habit-col.today .habit-track {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
+.habit-day {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: capitalize;
+}
+
 /* ===================== FORMULAIRE D'AJOUT ===================== */
 .add-form {
   padding: 14px;
@@ -750,13 +836,6 @@ input[type="datetime-local"] {
   flex-direction: column;
   align-items: center;
   animation: splash-rise 0.5s ease both;
-}
-
-.splash-icon img {
-  border-radius: 18px;
-  box-shadow: var(--shadow);
-  margin-bottom: 26px;
-  opacity: 0.95;
 }
 
 .splash-quote {
